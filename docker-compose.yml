@@ -1,0 +1,12 @@
+services:
+  consolida-frontend:
+    container_name: consolida-frontend
+    build:
+      context: .
+      args:
+        VITE_API_URL: https://consolida-api.up.railway.app
+    ports:
+      - "8020:80"
+    restart: unless-stopped
+    environment:
+      - PORT=80
