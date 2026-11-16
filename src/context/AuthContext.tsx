@@ -10,6 +10,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { User, LoginCredentials, LoginResult, ChangePasswordPayload } from '../types/auth';
 import { authService } from '../services/authService';
 import { setAuthToken, registerUnauthorizedHandler } from '../services/apiClient';
+import { isJwtExpired } from '../utils/jwt';
 
 const TOKEN_STORAGE_KEY = 'consolida_auth_token';
 
@@ -48,7 +49,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
     if (initialToken) return initialToken;
     if (initialUser) return 'active-session-token';
     try {
-      return localStorage.getItem(TOKEN_STORAGE_KEY) || sessionStorage.getItem(TOKEN_STORAGE_KEY);
+      const stored = localStorage.getItem(TOKEN_STORAGE_KEY) || sessionStorage.getItem(TOKEN_STORAGE_KEY);
+      // Se já houver token expirado no storage, descarta de imediato
+      if (stored && isJwtExpired(stored)) {
+        localStorage.removeItem(TOKEN_STORAGE_KEY);
+        sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+        return null;
+      }
+      return stored;
     } catch {
       return null;
     }
@@ -85,7 +93,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
         await authService.logout();
       }
     } catch {
-      // Limpeza forçada
+      // Falha na API de logout remoto não impede a limpeza local segura da sessão
     } finally {
       saveToken(null);
       setUser(null);
@@ -102,7 +110,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
     });
   }, [logout]);
 
-  // Restauração de sessão ao carregar
+  // Restauração de sessão ao recarregar a página
   useEffect(() => {
     let isMounted = true;
 
@@ -116,6 +124,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
         return;
       }
 
+      // Validação prévia de expiração local do JWT
+      if (isJwtExpired(token)) {
+        if (isMounted) {
+          saveToken(null);
+          setUser(null);
+          setSessionExpiredMessage('Sua sessão expirou');
+          setIsLoading(false);
+        }
+        return;
+      }
+
       setAuthToken(token);
       try {
         const userData = await authService.getMe();
@@ -125,10 +144,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
             setIsPasswordChangeModalOpen(true);
           }
         }
-      } catch {
+      } catch (err: any) {
         if (isMounted) {
-          saveToken(null);
-          setUser(null);
+          // Limpa a credencial apenas se a rejeição foi por 401 Unauthorized (token inválido/expirado)
+          if (err.status === 401) {
+            saveToken(null);
+            setUser(null);
+            setSessionExpiredMessage('Sua sessão expirou');
+          } else {
+            // Em caso de erro de rede ou 404/5xx, mantém o token para nova tentativa sem deslogar indevidamente
+          }
         }
       } finally {
         if (isMounted) {
@@ -165,13 +190,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({
           setIsPasswordChangeModalOpen(true);
         }
       } catch {
-        setUser({
-          id: 'user-auth',
-          name: credentials.email.split('@')[0],
-          email: credentials.email,
-          roles: ['VIEWER'],
-          status: 'ACTIVE',
-        });
+        // Sem simulação de perfil: falha explícita se o backend não retornar o perfil
+        saveToken(null);
+        throw new Error(
+          'Autenticação realizada, porém não foi possível obter os dados de perfil do usuário na API (GET /api/v1/auth/me).'
+        );
       }
     }
 

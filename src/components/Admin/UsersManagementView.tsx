@@ -133,6 +133,23 @@ export const UsersManagementView: React.FC = () => {
     };
   }, [usersList]);
 
+  // Contagem de administradores ativos para prevenção de inativação
+  const activeAdminsCount = useMemo(() => {
+    return usersList.filter((u) => u.roles?.includes('ADMIN') && u.status === 'ACTIVE').length;
+  }, [usersList]);
+
+  // Proteção contra perda de dados em formulário não salvo ao recarregar a página
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isCreateModalOpen && (formName.trim() || formEmail.trim())) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isCreateModalOpen, formName, formEmail]);
+
   // Submissão do Cadastro
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -144,6 +161,10 @@ export const UsersManagementView: React.FC = () => {
     }
     if (!formEmail.trim() || !formEmail.includes('@')) {
       setFormError('Informe um e-mail corporativo válido.');
+      return;
+    }
+    if (usersList.some((u) => u.email.toLowerCase() === formEmail.trim().toLowerCase())) {
+      setFormError('Este endereço de e-mail já está cadastrado no sistema.');
       return;
     }
     if (formRoles.length === 0) {
@@ -727,6 +748,21 @@ export const UsersManagementView: React.FC = () => {
               </div>
             </div>
 
+            {statusActionModal.targetStatus === 'INACTIVE' &&
+              statusActionModal.user.roles?.includes('ADMIN') &&
+              activeAdminsCount <= 1 && (
+                <div
+                  role="alert"
+                  className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-start gap-2.5"
+                >
+                  <ShieldAlert className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                  <div className="space-y-0.5">
+                    <span className="font-semibold block">Ação Bloqueada:</span>
+                    <span>Operação não permitida: não é possível inativar o único Administrador ativo do sistema.</span>
+                  </div>
+                </div>
+              )}
+
             {actionError && (
               <div
                 role="alert"
@@ -768,7 +804,12 @@ export const UsersManagementView: React.FC = () => {
               <button
                 type="button"
                 onClick={handleConfirmStatusChange}
-                disabled={isUpdatingStatus}
+                disabled={
+                  isUpdatingStatus ||
+                  (statusActionModal.targetStatus === 'INACTIVE' &&
+                    statusActionModal.user.roles?.includes('ADMIN') &&
+                    activeAdminsCount <= 1)
+                }
                 className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-white font-semibold text-xs shadow-md transition-all cursor-pointer ${
                   statusActionModal.targetStatus === 'INACTIVE'
                     ? 'bg-rose-600 hover:bg-rose-500 shadow-rose-600/20'

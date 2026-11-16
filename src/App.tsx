@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  * 
  * Aplicação Principal - Consolida Frontend
- * Em conformidade com SCRUM-12 (Autenticação, Sessão, Gestão de Usuários e Troca de Senha).
+ * Em conformidade com SCRUM-12 (Autenticação, Sessão, Gestão de Usuários, Troca de Senha e Roteamento).
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -37,11 +37,64 @@ const AppContent: React.FC = () => {
     isAuthenticated,
     isLoading: isAuthLoading,
     isProvisionalPassword,
+    isAdmin,
     isPasswordChangeModalOpen,
     closePasswordChangeModal,
   } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<'status' | 'users'>('status');
+  // Roteamento por hash sincronizado com o navegador (#status | #users)
+  const getInitialTab = (): 'status' | 'users' => {
+    try {
+      const hash = window.location.hash.replace('#', '').toLowerCase();
+      if (hash === 'users' || hash === '/users' || hash === 'admin/users') return 'users';
+      return 'status';
+    } catch {
+      return 'status';
+    }
+  };
+
+  const [activeTab, setActiveTabState] = useState<'status' | 'users'>(getInitialTab);
+  const [returnUrl, setReturnUrl] = useState<string>(() => {
+    try {
+      return window.location.hash || '#status';
+    } catch {
+      return '#status';
+    }
+  });
+
+  const handleSelectTab = (tab: 'status' | 'users') => {
+    setActiveTabState(tab);
+    try {
+      window.location.hash = `#${tab}`;
+    } catch {}
+  };
+
+  // Monitora alterações na URL (#hash)
+  useEffect(() => {
+    const handleHashChange = () => {
+      const currentHash = window.location.hash.replace('#', '').toLowerCase();
+      if (!isAuthenticated) {
+        setReturnUrl(window.location.hash || '#status');
+      }
+      if (currentHash === 'users' || currentHash === '/users' || currentHash === 'admin/users') {
+        setActiveTabState('users');
+      } else {
+        setActiveTabState('status');
+      }
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [isAuthenticated]);
+
+  // Retorno à rota solicitada originalmente após o login
+  const handleLoginSuccess = () => {
+    if (returnUrl.includes('users') && isAdmin) {
+      handleSelectTab('users');
+    } else {
+      handleSelectTab('status');
+    }
+  };
 
   const [rootData, setRootData] = useState<RootMessageResponse | null>(null);
   const [isLoadingRoot, setIsLoadingRoot] = useState<boolean>(true);
@@ -102,12 +155,12 @@ const AppContent: React.FC = () => {
     );
   }
 
-  // Se não estiver autenticado, exibe a tela oficial de login
+  // Se não estiver autenticado, exibe a tela oficial de login com suporte a returnUrl
   if (!isAuthenticated) {
     return (
       <>
         <Header isHealthy={isHealthy} isLoadingHealth={isLoadingHealth} />
-        <LoginView />
+        <LoginView returnUrl={returnUrl} onSuccess={handleLoginSuccess} />
       </>
     );
   }
@@ -123,7 +176,7 @@ const AppContent: React.FC = () => {
         isHealthy={isHealthy}
         isLoadingHealth={isLoadingHealth}
         activeTab={activeTab}
-        onSelectTab={setActiveTab}
+        onSelectTab={handleSelectTab}
       />
 
       {/* Main Content Area */}
