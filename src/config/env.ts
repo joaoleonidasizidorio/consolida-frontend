@@ -17,3 +17,4 @@ export const env: EnvConfig = {
   apiUrl: rawApiUrl.replace(/\/+$/, ''),
   isDev: import.meta.env.DEV,
 };
+

@@ -60,6 +60,31 @@ docker compose down
 
 ---
 
+## 🔐 Módulo de Autenticação, Sessão e Gestão de Usuários (SCRUM-12)
+
+Implementação oficial de produção em estrita conformidade com **SCRUM-12** e **SCRUM-10**:
+
+- **Autenticação Real**:
+  - `POST /api/v1/auth/login`: e-mail e senha corporativos, alternância de visibilidade, bloqueio temporário (lockout), mensagem unificada *"E-mail ou senha incorretos"* sem enumeração de usuário.
+  - Guarda de rotas protegidas (`ProtectedRoute`) com redirecionamento de usuários não autenticados preservando a rota solicitada.
+- **Gerenciamento de Sessão**:
+  - Interceptador HTTP para expiração de sessão (HTTP 401) com logout automático e banner informativo *"Sua sessão expirou"*.
+  - Token de sessão transmitido via cabeçalho `Authorization: Bearer <token>`.
+  - Zero credenciais em texto puro no frontend e zero logs de credenciais.
+- **Alteração de Senha**:
+  - `POST /api/v1/auth/change-password`: validação de mínimo 10 caracteres, confirmação idêntica com validação inline e regras de segurança visíveis antes do envio.
+  - Fluxo mandatório para usuários com flag de senha provisória (`requiresPasswordChange`).
+- **Administração de Usuários (Exclusivo Perfil ADMIN)**:
+  - `GET /api/v1/users`: listagem filtrável por nome, e-mail, perfis e situação da conta.
+  - `POST /api/v1/users`: cadastro com geração de senha provisória de **uso único** pela API, botão para cópia e aviso explícito de que a senha não poderá ser visualizada novamente.
+  - `PATCH /api/v1/users/:id/status`: inativação e reativação com confirmação e justificativa.
+  - **Proteção do Último Administrador**: bloqueio mandatório que impede a inativação do único administrador ativo do sistema.
+  - **Restrição Estrita**: ausência de botão ou funcionalidade de exclusão física de usuários.
+- **Resiliência e Dependência da API**:
+  - Se os endpoints de autenticação ainda não estiverem implantados no ambiente Railway pelo time de backend (HTTP 404), a aplicação informa amigavelmente o status *"BLOQUEADO POR DEPENDÊNCIA DA API"*, preservando a estabilidade da interface.
+
+---
+
 ## 💻 Executando Localmente com Node.js
 
 **Pré-requisitos**: Node.js 20+ (recomendado v22) e npm.
@@ -103,3 +128,4 @@ O workflow do GitHub Actions em `.github/workflows/ci.yml` executa automaticamen
 
 ## 📄 Licença
 Distribuído sob licença proprietária corporativa. Todos os direitos reservados.
+

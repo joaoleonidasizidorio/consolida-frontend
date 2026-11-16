@@ -30,3 +30,4 @@ ENV PORT=80
 
 # Inicia processando o template com envsubst e roda o Nginx
 CMD ["/bin/sh", "-c", "envsubst '${PORT}' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf && nginx -g 'daemon off;'"]
+

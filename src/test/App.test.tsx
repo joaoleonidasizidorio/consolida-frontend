@@ -2,18 +2,36 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { App } from '../App';
 import * as systemService from '../services/systemService';
+import { User } from '../types/auth';
 
 vi.mock('../services/systemService', () => ({
   getRootMessage: vi.fn(),
   getHealthCheck: vi.fn(),
 }));
 
-describe('Consolida Frontend - Base de Produção', () => {
+const mockAdminUser: User = {
+  id: 'usr-admin-1',
+  name: 'Administrador Oficial',
+  email: 'admin@consolida.com',
+  roles: ['ADMIN'],
+  status: 'ACTIVE',
+};
+
+describe('Consolida Frontend - Base de Produção & Autenticação', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('deve renderizar o cabeçalho com o nome Consolida e status inicial', async () => {
+  it('deve renderizar a tela de login quando o usuário não estiver autenticado', async () => {
+    render(<App />);
+
+    expect(screen.getAllByText(/Consolida/)[0]).toBeInTheDocument();
+    expect(screen.getByText('E-mail corporativo')).toBeInTheDocument();
+    expect(screen.getByText('Senha de acesso')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Entrar no Consolida/i })).toBeInTheDocument();
+  });
+
+  it('deve renderizar o cabeçalho e dashboard quando autenticado', async () => {
     vi.mocked(systemService.getRootMessage).mockResolvedValueOnce({
       message: 'Hello World - Consolida',
     });
@@ -23,14 +41,14 @@ describe('Consolida Frontend - Base de Produção', () => {
       checkedAt: '12:00:00',
     });
 
-    render(<App />);
+    render(<App initialUser={mockAdminUser} />);
 
     expect(screen.getAllByText(/Consolida/)[0]).toBeInTheDocument();
     expect(screen.getByText('Produção FE')).toBeInTheDocument();
-    expect(screen.getByText('Gestão Financeira Multinegócio')).toBeInTheDocument();
+    expect(screen.getByText('Administrador Oficial')).toBeInTheDocument();
   });
 
-  it('deve exibir a mensagem recebida de GET / da API com sucesso', async () => {
+  it('deve exibir a mensagem recebida de GET / da API com sucesso no dashboard autenticado', async () => {
     vi.mocked(systemService.getRootMessage).mockResolvedValueOnce({
       message: 'Hello World - Consolida',
     });
@@ -40,7 +58,7 @@ describe('Consolida Frontend - Base de Produção', () => {
       checkedAt: '12:00:00',
     });
 
-    render(<App />);
+    render(<App initialUser={mockAdminUser} />);
 
     await waitFor(() => {
       expect(screen.getByText('Hello World - Consolida')).toBeInTheDocument();
@@ -57,7 +75,7 @@ describe('Consolida Frontend - Base de Produção', () => {
       checkedAt: '12:00:00',
     });
 
-    render(<App />);
+    render(<App initialUser={mockAdminUser} />);
 
     await waitFor(() => {
       expect(screen.getByText('UP')).toBeInTheDocument();
@@ -76,7 +94,7 @@ describe('Consolida Frontend - Base de Produção', () => {
       error: 'Servidor indisponível ou fora do ar.',
     });
 
-    render(<App />);
+    render(<App initialUser={mockAdminUser} />);
 
     await waitFor(() => {
       expect(screen.getByText(/Falha ao consultar GET \//)).toBeInTheDocument();

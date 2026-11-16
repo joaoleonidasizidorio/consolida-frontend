@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  * 
  * Cliente HTTP Centralizado - Consolida Frontend
+ * Inclui gestão de token Bearer, timeout e interceptação de 401 (sessão expirada).
  */
 
 import { env } from '../config/env';
@@ -10,17 +11,34 @@ import { env } from '../config/env';
 export class ApiError extends Error {
   public status: number;
   public isNetworkError: boolean;
+  public data?: any;
 
-  constructor(message: string, status = 500, isNetworkError = false) {
+  constructor(message: string, status = 500, isNetworkError = false, data?: any) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.isNetworkError = isNetworkError;
+    this.data = data;
   }
 }
 
 export interface RequestOptions extends RequestInit {
   timeoutMs?: number;
+}
+
+let activeAuthToken: string | null = null;
+let unauthorizedHandler: (() => void) | null = null;
+
+export function setAuthToken(token: string | null): void {
+  activeAuthToken = token;
+}
+
+export function getAuthToken(): string | null {
+  return activeAuthToken;
+}
+
+export function registerUnauthorizedHandler(handler: () => void): void {
+  unauthorizedHandler = handler;
 }
 
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -31,10 +49,14 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-  const headers = {
-    'Accept': 'application/json',
-    ...(fetchOptions.headers || {}),
+  const headers: Record<string, string> = {
+    Accept: 'application/json',
+    ...(fetchOptions.headers as Record<string, string> || {}),
   };
+
+  if (activeAuthToken && !headers['Authorization']) {
+    headers['Authorization'] = `Bearer ${activeAuthToken}`;
+  }
 
   try {
     let response: Response;
@@ -64,13 +86,20 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
 
     clearTimeout(timeoutId);
 
+    if (response.status === 401) {
+      if (unauthorizedHandler) {
+        unauthorizedHandler();
+      }
+    }
+
     if (!response.ok) {
       let errMsg = `Falha na requisição (HTTP ${response.status}): ${response.statusText}`;
+      let errJson: any = null;
       try {
-        const errJson = await response.json();
+        errJson = await response.json();
         if (errJson?.message) errMsg = errJson.message;
       } catch {}
-      throw new ApiError(errMsg, response.status, false);
+      throw new ApiError(errMsg, response.status, false, errJson);
     }
 
     const contentType = response.headers.get('content-type') || '';
